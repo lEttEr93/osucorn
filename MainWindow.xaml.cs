@@ -27,9 +27,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<Profile> rows = [];
     private PresetFile file = new();
     private bool loading; // 初始化 / 切换预设期间不要触发保存
-    private System.Windows.Threading.DispatcherTimer? pollTimer;
-    private bool polling;
-    private string lastLoggedState = string.Empty;
+    private Engine? engine;
 
     public MainWindow()
     {
@@ -48,8 +46,7 @@ public partial class MainWindow : Window
 
         selectActivePreset(file.ActivePreset);
 
-        // 只读轮询：每 500ms 读一次 tosu，把状态画到卡片上。这一版**不发送任何按键**。
-        Loaded += (_, _) => startPolling();
+        Loaded += (_, _) => startEngine();
 
         // 开发用：--snapshot=<png> 渲染一张就走。
         if (environmentSnapshotPath() is { } path)
@@ -63,32 +60,40 @@ public partial class MainWindow : Window
         }
     }
 
-    private void startPolling()
+    private void startEngine()
     {
-        pollTimer = new System.Windows.Threading.DispatcherTimer(
-            System.Windows.Threading.DispatcherPriority.Background)
+        engine = new Engine(tosu, () => activePreset);
+        engine.StateUpdated += state => Dispatcher.BeginInvoke(() => applyState(state));
+        engine.Notice += message => Dispatcher.BeginInvoke(() => DetailText.Text = message);
+        engine.GamePresenceChanged += running => Dispatcher.BeginInvoke(() =>
         {
-            Interval = TimeSpan.FromMilliseconds(500)
-        };
-        pollTimer.Tick += async (_, _) => await pollAsync();
-        pollTimer.Start();
-        _ = pollAsync();
+            // 游戏一出现就把配置窗藏到托盘；游戏退出再回来。
+            if (running)
+            {
+                if (IsVisible)
+                    Hide();
+            }
+            else if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+        });
+        engine.Start();
+
+        // 皮肤列表要游戏在前台才能扫，所以等第一拍有状态再试（不行就下一拍继续试）。
+        _ = scanSkinsWhenReadyAsync();
     }
 
-    /// <summary>读一次 tosu 并刷新状态卡；只在状态真的变了时才写日志。</summary>
-    private async Task pollAsync()
+    private async Task scanSkinsWhenReadyAsync()
     {
-        if (polling)
-            return;
-        polling = true;
-        try
+        for (int attempt = 0; attempt < 600 && engine is not null && !engine.skinsScanned; attempt += 1)
         {
-            TosuState state = await tosu.ReadAsync();
-            applyState(state);
-        }
-        finally
-        {
-            polling = false;
+            await Task.Delay(500);
+            if (engine is null || engine.skinsScanned)
+                return;
+            if (await engine.ScanSkinsIfNeededAsync())
+                return;
         }
     }
 
@@ -106,13 +111,6 @@ public partial class MainWindow : Window
         else
         {
             DetailText.Text = $"等待 {tosu.Endpoint}（tosu 没起来时这里会一直是未连接）";
-        }
-
-        if (state.Fingerprint != lastLoggedState)
-        {
-            lastLoggedState = state.Fingerprint;
-            AppLog.Info($"tosu 状态：{state.Summary}"
-                        + (state.KeyCount is { } keys ? $"｜键数 {keys}（来源 {state.KeyCountSource}）" : "｜键数未知"));
         }
     }
 
@@ -237,6 +235,13 @@ public partial class MainWindow : Window
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    protected override void OnClosed(EventArgs e)
+    {
+        engine?.Dispose();
+        engine = null;
+        base.OnClosed(e);
+    }
 
     private static string? environmentSnapshotPath()
     {
