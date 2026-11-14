@@ -36,10 +36,20 @@ public static class Typography
         try
         {
             ICollection<FontFamily> families = Fonts.GetFontFamilies(new Uri(EmbeddedFontsUri));
+            // 诊断用：把拿到的家族名列出来 —— 失败时能一眼看出是「没读到」还是「名字对不上」。
+            AppLog.Info($"字体：{EmbeddedFontsUri} 读到 {families.Count} 个家族"
+                        + (families.Count == 0
+                            ? string.Empty
+                            : "：" + string.Join(" / ", families.Select(family =>
+                                string.Join("|", family.FamilyNames.Values.DefaultIfEmpty("(无名)"))).Take(8))));
+
             FontFamily? found = families.FirstOrDefault(candidate =>
                 candidate.FamilyNames.Values.Any(name => name.Equals(FamilyName, StringComparison.OrdinalIgnoreCase)));
+            // 必须返回 GetFontFamilies 拿到的**对象**：用字符串 new FontFamily("Outfit") 只会去系统字体里找，
+            // 编进程序集的字体按名字是解析不到的（Roam 的 Typography 同样踩过这个坑）。
+            // 中文不需要写回退列表：WPF 逐字符找不到字形时会自己回退到系统字体。
             if (found is not null)
-                return new FontFamily($"{FamilyName}, {SystemFontName}");
+                return found;
         }
         catch (Exception exception)
         {
