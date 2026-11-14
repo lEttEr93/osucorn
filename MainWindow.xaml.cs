@@ -28,6 +28,8 @@ public partial class MainWindow : Window
     private PresetFile file = new();
     private bool loading; // 初始化 / 切换预设期间不要触发保存
     private Engine? engine;
+    private TrayIcon? tray;
+    private bool firstPresenceSeen;
 
     public MainWindow()
     {
@@ -62,17 +64,24 @@ public partial class MainWindow : Window
 
     private void startEngine()
     {
+        tray = new TrayIcon(this);
+
         engine = new Engine(tosu, () => activePreset);
         engine.StateUpdated += state => Dispatcher.BeginInvoke(() => applyState(state));
         engine.Notice += message => Dispatcher.BeginInvoke(() => DetailText.Text = message);
         engine.GamePresenceChanged += running => Dispatcher.BeginInvoke(() =>
         {
-            // 游戏一出现就把配置窗藏到托盘；游戏退出再回来。
-            // 截图模式（--snapshot）不藏，否则拍到的是一张空图。
+            // 只在「游戏从无到有」的那一刻藏起来；corn 自己启动时游戏已经在跑，就保持可见
+            // —— 否则用户刚打开就没了窗口，看起来像闪退。截图模式也不藏。
             if (running)
             {
-                if (IsVisible && environmentSnapshotPath() is null)
+                if (firstPresenceSeen && IsVisible && environmentSnapshotPath() is null)
+                {
                     Hide();
+                    AppLog.Info("游戏已启动，窗口收进托盘（双击托盘图标可以再打开）");
+                }
+
+                firstPresenceSeen = true;
             }
             else if (!IsVisible)
             {
@@ -293,6 +302,8 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         engine?.Dispose();
+        tray?.Dispose();
+        tray = null;
         engine = null;
         base.OnClosed(e);
     }
