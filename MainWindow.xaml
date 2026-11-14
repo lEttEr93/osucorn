@@ -2,24 +2,72 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="osu! corn"
-        Width="470" Height="640"
-        MinWidth="430" MinHeight="420"
+        Width="470" Height="660"
+        MinWidth="430" MinHeight="460"
         Background="{StaticResource BackgroundBrush}"
         TextOptions.TextFormattingMode="Ideal"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
-        <!-- 卡片里的小标签：模式 / 键数 -->
-        <Style x:Key="BadgeStyle" TargetType="Border">
-            <Setter Property="Background" Value="#2A3036" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="6,2" />
-            <Setter Property="Margin" Value="0,0,6,0" />
+        <!-- 预设 chip：选中（启用中）时用强调色 -->
+        <Style x:Key="PresetChipStyle" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Chip" Background="{StaticResource SurfaceRaisedBrush}"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                CornerRadius="12" Padding="11,4">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="#1A1014" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
+
+        <!-- 表格的一行：模式标签 + 皮肤 + 流速 -->
+        <DataTemplate x:Key="ProfileRowTemplate">
+            <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="9,7" Margin="0,0,0,5">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="74" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="64" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Label}" FontSize="11.5" VerticalAlignment="Center"
+                               Foreground="{StaticResource SecondaryBrush}" />
+                    <TextBox Grid.Column="1" Text="{Binding Skin, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             FontSize="11" Padding="6,3" Tag="{Binding}"
+                             LostFocus="ProfileField_LostFocus"
+                             ToolTip="皮肤名，必须和 osu! 里显示的一致；留空 = 这行不动皮肤" />
+                    <TextBox Grid.Column="2" Text="{Binding ScrollSpeedText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             FontSize="11" Padding="6,3" Margin="6,0,0,0" Tag="{Binding}"
+                             LostFocus="ProfileField_LostFocus"
+                             IsEnabled="{Binding SupportsScrollSpeed}"
+                             ToolTip="mania 流速 1–40，整数档；留空 = 这行不动流速" />
+                </Grid>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid Margin="14,12,14,10">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -42,7 +90,7 @@
             </StackPanel>
         </DockPanel>
 
-        <!-- 当前状态：tosu 连上之后这里是活的 -->
+        <!-- 当前状态 -->
         <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1" CornerRadius="7" Padding="10,8" Margin="0,12,0,0">
             <StackPanel>
@@ -57,55 +105,60 @@
             </StackPanel>
         </Border>
 
-        <!-- 预设列表 -->
+        <!-- 预设：多套，其中一套启用中（自动匹配模式，不需要手动挑行） -->
         <DockPanel Grid.Row="2" Margin="0,12,0,0">
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                 <Button x:Name="AddPresetButton" Content="＋ 添加预设" DockPanel.Dock="Right"
                         HorizontalAlignment="Right" Padding="10,3" FontSize="11"
-                        Click="AddPresetButton_Click" ToolTip="新建一个空预设，改 presets.json 或等编辑器" />
-                <TextBlock Text="预设" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <TextBlock x:Name="PresetCountText" DockPanel.Dock="Right" HorizontalAlignment="Right"
-                           VerticalAlignment="Center" Margin="0,0,10,0"
-                           FontSize="10.5" Foreground="{StaticResource MutedTextBrush}" />
+                        Click="AddPresetButton_Click" ToolTip="新建一套空预设（5 行模式配置）" />
+                <Button x:Name="DeletePresetButton" Content="删除" DockPanel.Dock="Right"
+                        HorizontalAlignment="Right" Padding="10,3" FontSize="11" Margin="0,0,6,0"
+                        Click="DeletePresetButton_Click" ToolTip="删除当前这套预设" />
+                <TextBlock Text="预设" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Margin="0,0,10,0" />
             </DockPanel>
+            <ItemsControl x:Name="PresetChips">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <RadioButton Content="{Binding Name}" Style="{StaticResource PresetChipStyle}"
+                                     GroupName="presets" Tag="{Binding}"
+                                     Checked="PresetChip_Checked" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DockPanel>
+
+        <!-- 配置表：这套预设里的 5 行，由 corn 自动按模式/键数挑选 -->
+        <DockPanel Grid.Row="3" Margin="0,10,0,0">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <TextBlock x:Name="ProfilesHeader" Text="配置（自动匹配当前模式，不用手动选）"
+                           FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+            <!-- 列头：告诉用户右边两格分别是皮肤名和流速 -->
+            <Grid DockPanel.Dock="Top" Margin="9,0,9,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="74" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="64" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="模式" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                <TextBlock Grid.Column="1" Text="皮肤（留空 = 不动）" FontSize="10"
+                           Foreground="{StaticResource MutedTextBrush}" />
+                <TextBlock Grid.Column="2" Text="流速" FontSize="10" Margin="6,0,0,0"
+                           Foreground="{StaticResource MutedTextBrush}" />
+            </Grid>
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl x:Name="PresetList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
-                                    BorderThickness="1" CornerRadius="7" Padding="10,9" Margin="0,0,0,7">
-                                <DockPanel>
-                                    <Button Content="✕" DockPanel.Dock="Right" VerticalAlignment="Center"
-                                            Width="26" Padding="0,3" FontSize="11" Margin="6,0,0,0"
-                                            Foreground="{StaticResource MutedTextBrush}"
-                                            Click="DeletePresetButton_Click" Tag="{Binding}"
-                                            ToolTip="删除这个预设" />
-                                    <Button Content="应用" DockPanel.Dock="Right" VerticalAlignment="Center"
-                                            Padding="12,4" FontSize="11"
-                                            Click="ApplyPresetButton_Click" Tag="{Binding}" />
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
-                                                       VerticalAlignment="Center" />
-                                            <Border Style="{StaticResource BadgeStyle}" Margin="8,0,6,0">
-                                                <TextBlock Text="{Binding ModeBadge}" FontSize="10"
-                                                           Foreground="{StaticResource SecondaryBrush}" />
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{Binding Summary}" FontSize="11" Margin="0,3,0,0"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <ItemsControl x:Name="ProfileList" ItemTemplate="{StaticResource ProfileRowTemplate}" />
             </ScrollViewer>
         </DockPanel>
 
         <!-- 底部：最近一条日志 -->
-        <Border Grid.Row="3" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+        <Border Grid.Row="4" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1" CornerRadius="7" Padding="10,7" Margin="0,10,0,0">
             <DockPanel>
                 <TextBlock Text="日志" FontSize="10.5" Foreground="{StaticResource MutedTextBrush}"
@@ -115,7 +168,7 @@
             </DockPanel>
         </Border>
 
-        <DockPanel Grid.Row="4" Margin="0,8,0,0">
+        <DockPanel Grid.Row="5" Margin="0,8,0,0">
             <TextBlock x:Name="VersionText" DockPanel.Dock="Right" HorizontalAlignment="Right" FontSize="10.5"
                        Foreground="{StaticResource MutedTextBrush}" />
             <TextBlock Text="只通过 osu! 自己的快捷键操作，不改任何配置文件" FontSize="10.5"

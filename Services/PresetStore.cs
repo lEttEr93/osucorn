@@ -22,33 +22,36 @@ public sealed class PresetStore
 
     public string FilePath => path;
 
-    public List<Preset> Load()
+    /// <summary>读整份配置；文件不存在或坏掉时给一套默认的「默认」预设。</summary>
+    public PresetFile Load()
     {
         try
         {
             if (!File.Exists(path))
             {
-                List<Preset> seed = defaultPresets();
+                PresetFile seed = DefaultFile();
                 Save(seed);
                 AppLog.Info($"预设：没有 {path}，已写一份示例");
                 return seed;
             }
 
-            PresetFile? file = JsonSerializer.Deserialize<PresetFile>(File.ReadAllText(path), Options);
-            return file?.Presets ?? [];
+            PresetFile file = JsonSerializer.Deserialize<PresetFile>(File.ReadAllText(path), Options) ?? DefaultFile();
+            if (file.Presets.Count == 0)
+                file = DefaultFile();
+            normalize(file);
+            return file;
         }
         catch (Exception exception)
         {
             AppLog.Error("预设读取失败", exception);
-            return [];
+            return DefaultFile();
         }
     }
 
-    public void Save(IEnumerable<Preset> presets)
+    public void Save(PresetFile file)
     {
         try
         {
-            PresetFile file = new() { Presets = [.. presets] };
             File.WriteAllText(path, JsonSerializer.Serialize(file, Options));
         }
         catch (Exception exception)
@@ -57,13 +60,28 @@ public sealed class PresetStore
         }
     }
 
-    /// <summary>第一次运行的示例：覆盖四个模式，mania 再分 4K / 7K。</summary>
-    private static List<Preset> defaultPresets() =>
-    [
-        new() { Name = "4K 惯用", Mode = "mania", Keys = 4, ScrollSpeed = 30, Note = "皮肤留空就先不动" },
-        new() { Name = "7K 惯用", Mode = "mania", Keys = 7, ScrollSpeed = 34, Note = "皮肤留空就先不动" },
-        new() { Name = "std 干净界面", Mode = "osu", Keys = 0, Note = "只切皮肤" },
-        new() { Name = "taiko", Mode = "taiko", Keys = 0 },
-        new() { Name = "catch", Mode = "fruits", Keys = 0 }
-    ];
+    /// <summary>补齐每一套预设里缺的模式行（手改文件删漏了一行也能兜住）。</summary>
+    private static void normalize(PresetFile file)
+    {
+        foreach (Preset preset in file.Presets)
+        {
+            preset.Profiles ??= [];
+            foreach (Profile row in Preset.CreateDefault(preset.Name).Profiles)
+            {
+                bool exists = preset.Profiles.Any(profile =>
+                    profile.Mode == row.Mode && (row.Mode != "mania" || profile.Keys == row.Keys));
+                if (!exists)
+                    preset.Profiles.Add(row);
+            }
+        }
+
+        if (file.Presets.All(preset => preset.Name != file.ActivePreset))
+            file.ActivePreset = file.Presets[0].Name;
+    }
+
+    private static PresetFile DefaultFile() => new()
+    {
+        ActivePreset = "默认",
+        Presets = [Preset.CreateDefault("默认")]
+    };
 }

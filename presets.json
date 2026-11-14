@@ -1,44 +1,15 @@
 {
+  "activePreset": "默认",
   "presets": [
     {
-      "name": "4K 惯用",
-      "mode": "mania",
-      "keys": 4,
-      "skin": null,
-      "scrollSpeed": 30,
-      "note": "皮肤留空 = 先不动"
-    },
-    {
-      "name": "7K 惯用",
-      "mode": "mania",
-      "keys": 7,
-      "skin": null,
-      "scrollSpeed": 34,
-      "note": "皮肤留空 = 先不动"
-    },
-    {
-      "name": "std 干净界面",
-      "mode": "osu",
-      "keys": 0,
-      "skin": null,
-      "scrollSpeed": null,
-      "note": "只切皮肤（还没填）"
-    },
-    {
-      "name": "taiko",
-      "mode": "taiko",
-      "keys": 0,
-      "skin": null,
-      "scrollSpeed": null,
-      "note": ""
-    },
-    {
-      "name": "catch",
-      "mode": "fruits",
-      "keys": 0,
-      "skin": null,
-      "scrollSpeed": null,
-      "note": ""
+      "name": "默认",
+      "profiles": [
+        { "mode": "mania", "keys": 4, "skin": null, "scrollSpeed": 30 },
+        { "mode": "mania", "keys": 7, "skin": null, "scrollSpeed": 34 },
+        { "mode": "osu", "keys": 0, "skin": null, "scrollSpeed": null },
+        { "mode": "taiko", "keys": 0, "skin": null, "scrollSpeed": null },
+        { "mode": "fruits", "keys": 0, "skin": null, "scrollSpeed": null }
+      ]
     }
   ]
 }
