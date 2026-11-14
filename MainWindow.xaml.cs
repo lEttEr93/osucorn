@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -8,23 +9,24 @@ using OsuCorn.Services;
 namespace OsuCorn;
 
 /// <summary>
-/// 界面外壳：先只有「看」的部分 —— 预设列表、当前状态、日志。
+/// 界面外壳：预设列表 + 当前状态 + 日志。
 ///
-/// 引擎（tosu 读状态 / 快捷键发送 / 键数解析）是下一步的事；这一版点「应用」只会在日志里
-/// 留一条记录，用来确认界面和数据结构没问题。
+/// 预设的新增 / 删除在这里完成并立刻落盘（presets.json 是唯一事实来源）；
+/// 「应用」按钮暂时只写日志 —— 引擎（tosu 读状态 / 快捷键发送 / 键数解析）还没接。
 /// </summary>
 public partial class MainWindow : Window
 {
     private readonly PresetStore store = new();
-    private List<Preset> presets = [];
+    private readonly ObservableCollection<Preset> presets = [];
 
     public MainWindow()
     {
         InitializeComponent();
 
-        presets = store.Load();
+        foreach (Preset preset in store.Load())
+            presets.Add(preset);
         PresetList.ItemsSource = presets;
-        PresetCountText.Text = $"{presets.Count} 个";
+        updateCount();
         VersionText.Text = $"v{typeof(MainWindow).Assembly.GetName().Version?.ToString(3)}";
 
         AppLog.LineAdded += line => Dispatcher.BeginInvoke(() => LogText.Text = line);
@@ -42,15 +44,61 @@ public partial class MainWindow : Window
         }
     }
 
+    private void updateCount() => PresetCountText.Text = $"{presets.Count} 个";
+
+    private void savePresets() => store.Save(presets);
+
     private void ApplyPresetButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: Preset preset })
             return;
 
-        // 占位：真正的应用逻辑（切皮肤 / 调流速）在引擎里，下一步接上。
         AppLog.Info($"应用预设《{preset.Name}》（{preset.ModeBadge}）：{preset.Summary} —— 引擎未接入，仅记录");
         StateText.Text = $"待应用：{preset.Name}";
         DetailText.Text = preset.Summary;
+    }
+
+    /// <summary>新增一个空预设：名字自动取「新预设 N」，其余留空，先落盘，细节改 presets.json。</summary>
+    private void AddPresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        int index = 1;
+        while (presets.Any(item => item.Name == $"新预设 {index}"))
+            index += 1;
+
+        Preset preset = new()
+        {
+            Name = $"新预设 {index}",
+            Mode = "mania",
+            Keys = 4,
+            Note = "皮肤 / 流速留空 = 这项不动"
+        };
+        presets.Add(preset);
+        savePresets();
+        updateCount();
+        AppLog.Info($"已添加预设《{preset.Name}》—— 具体皮肤 / 流速先手动改 presets.json");
+        LogText.Text = $"已添加《{preset.Name}》（{store.FilePath}）";
+    }
+
+    /// <summary>删除一个预设：先确认，再从列表和文件里一起去掉。</summary>
+    private void DeletePresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: Preset preset })
+            return;
+
+        MessageBoxResult answer = MessageBox.Show(
+            $"删除预设「{preset.Name}」？",
+            "osu! corn",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        presets.Remove(preset);
+        savePresets();
+        updateCount();
+        AppLog.Info($"已删除预设《{preset.Name}》");
+        LogText.Text = $"已删除《{preset.Name}》，剩 {presets.Count} 个";
     }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
