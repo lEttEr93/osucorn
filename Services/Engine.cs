@@ -109,7 +109,9 @@ public sealed class Engine : IDisposable
         }
 
         bool inSelect = state.StateName is "selectPlay" or "menu";
-        bool inPlay = state.StateName == "play" && !state.Paused;
+        // 流速要等「加载结束、真正进游戏」之后再调：tosu 的 beatmap.time.live 在加载阶段是 0，
+        // 开局后才开始走。留 150ms 余量，免得砸在读条/开场动画上。
+        bool inPlay = state.StateName == "play" && !state.Paused && state.LiveTime > 150;
 
         // 皮肤：选歌界面 + 目标非空 + 名字还没对上
         if (inSelect && !string.IsNullOrWhiteSpace(row.Skin) &&
@@ -167,8 +169,8 @@ public sealed class Engine : IDisposable
             bool executed = action.Kind switch
             {
                 ActionKind.Skin when state.StateName is "selectPlay" or "menu" => applySkin(action),
-                ActionKind.Speed when state.StateName == "play" && !state.Paused && state.ScrollSpeed is not null =>
-                    applySpeed(action),
+                ActionKind.Speed when state.StateName == "play" && !state.Paused &&
+                                   state.LiveTime > 150 && state.ScrollSpeed is not null => applySpeed(action),
                 _ => false
             };
 
@@ -236,11 +238,13 @@ public sealed class Engine : IDisposable
             currentIndex = 0;
 
         int total = skinOrder.Count;
-        // 只用「下一个皮肤」：Ctrl+Shift+E（上一个）从来没有被单独验证过，
-        // 实测 7K → 4K 需要反向时就会原地不动。宁可在环上多走几步，也不要走方向不对的那一半。
-        int steps = (targetIndex - currentIndex + total) % total;
-        AppLog.Info($"切皮肤：{current} → {target}（下一个 × {steps}，共 {total} 个）");
-        Notice?.Invoke($"切皮肤 {current} → {target}（下一个 × {steps}）");
+        // 两个方向都可用（Ctrl+Shift+T 下一个 / Ctrl+Shift+E 上一个），走环上更近的那一半。
+        int forward = (targetIndex - currentIndex + total) % total;
+        int backward = (currentIndex - targetIndex + total) % total;
+        bool useForward = forward <= backward;
+        int steps = useForward ? forward : backward;
+        AppLog.Info($"切皮肤：{current} → {target}（{(useForward ? "下一个" : "上一个")} × {steps}，共 {total} 个）");
+        Notice?.Invoke($"切皮肤 {current} → {target}（{(useForward ? "下一个" : "上一个")} × {steps}）");
 
         for (int index = 0; index < steps; index += 1)
         {

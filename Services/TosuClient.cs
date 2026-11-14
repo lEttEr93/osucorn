@@ -20,11 +20,12 @@ public sealed record TosuState(
     int BeatmapSetId,
     int? KeyCount,
     string KeyCountSource,
+    double LiveTime,
     string Fingerprint)
 {
     public static readonly TosuState Disconnected = new(
         false, string.Empty, false, false, string.Empty, string.Empty,
-        null, string.Empty, 0, 0, null, string.Empty, string.Empty);
+        null, string.Empty, 0, 0, null, string.Empty, 0, string.Empty);
 
     /// <summary>能不能动手（发快捷键）的前置条件：lazer、游戏在前台、没暂停。</summary>
     public bool ReadyToSend => Connected && Client == "lazer" && Focused && !Paused;
@@ -102,6 +103,7 @@ public sealed class TosuClient
         string mode = text(root, "settings", "mode", "name");
         double? speed = number(root, "settings", "mania", "scrollSpeed");
         string skin = text(root, "settings", "skin", "name");
+        double liveTime = number(root, "beatmap", "time", "live") ?? 0;
         int beatmapId = (int)(number(root, "beatmap", "id") ?? 0);
         int set = (int)(number(root, "beatmap", "set") ?? number(root, "beatmap", "setId") ?? 0);
 
@@ -116,7 +118,7 @@ public sealed class TosuClient
             AppLog.Info($"tosu 字段：{shape}");
         }
 
-        return new TosuState(true, client, focused, paused, state, mode, speed, skin, beatmapId, set, keys, source,
+        return new TosuState(true, client, focused, paused, state, mode, speed, skin, beatmapId, set, keys, source, liveTime,
             $"{state}|{mode}|{keys}|{beatmapId}|{skin}|{speed}|{focused}|{paused}");
     }
 
