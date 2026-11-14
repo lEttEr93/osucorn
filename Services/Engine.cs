@@ -156,7 +156,7 @@ public sealed class Engine : IDisposable
             return;
         if (!canSendNow())
         {
-            Notice?.Invoke($"待执行 {pending.Count} 项：等 osu! 回到前台");
+            Notice?.Invoke($"待执行 {pending.Count} 项：{whyCannotSend()}");
             return;
         }
 
@@ -183,8 +183,36 @@ public sealed class Engine : IDisposable
         }
     }
 
+    /// <summary>发不出去的具体原因，写进状态卡与日志。</summary>
+    private string whyCannotSend()
+    {
+        List<string> reasons = [];
+        if (!state.Connected) reasons.Add("tosu 未连接");
+        if (state.Client != "lazer") reasons.Add($"客户端 {state.Client}");
+        if (!state.Focused) reasons.Add("游戏未聚焦");
+        if (state.Paused) reasons.Add("游戏暂停中");
+        if (!GameWindow.IsOsuForeground()) reasons.Add($"前台是「{GameWindow.ForegroundTitle()}」");
+        return reasons.Count == 0 ? "未知原因" : string.Join("，", reasons);
+    }
+
     private bool canSendNow() =>
         state.Connected && state.Client == "lazer" && state.Focused && !state.Paused && GameWindow.IsOsuForeground();
+
+    /// <summary>调试用：不管预设，直接排一个「把流速 +N 格」的动作（N 可正可负）。</summary>
+    public void RequestSpeedNudge(int steps)
+    {
+        double current = state.ScrollSpeed ?? 0;
+        if (current <= 0)
+        {
+            Notice?.Invoke("拿不到当前流速（要先游玩一次）");
+            return;
+        }
+
+        double target = Math.Clamp(current + steps, 1, 40);
+        pending.Enqueue(new PendingAction(ActionKind.Speed, $"nudge{steps}", target));
+        AppLog.Info($"调试：排队流速 {current:0.0} → {target:0.0}");
+        Notice?.Invoke($"调试：已排队 流速 {current:0.0} → {target:0.0}（{whyCannotSend()}）");
+    }
 
     /// <summary>
     /// 切皮肤：先转一圈把环形列表建出来（只在需要时做一次），
@@ -199,8 +227,8 @@ public sealed class Engine : IDisposable
 
         if (!skinOrder.TryGetValue(target, out int targetIndex))
         {
-            Notice?.Invoke($"没有这个皮肤：{target}（先启动时扫一圈才知道有哪些）");
-            AppLog.Info($"切皮肤失败：列表里没有「{target}」");
+            Notice?.Invoke($"没有这个皮肤：{target}");
+            AppLog.Info($"切皮肤失败：列表里没有「{target}」（已知 {skinOrder.Count} 个）");
             return true; // 这条放弃，别卡住队列
         }
 
@@ -208,28 +236,23 @@ public sealed class Engine : IDisposable
             currentIndex = 0;
 
         int total = skinOrder.Count;
-        int forward = (targetIndex - currentIndex + total) % total;
-        int backward = (currentIndex - targetIndex + total) % total;
-        bool useForward = forward <= backward;
-        int steps = useForward ? forward : backward;
-
-        AppLog.Info($"切皮肤：{current} → {target}（{(useForward ? "下一个" : "上一个")} {steps} 次，共 {total} 个）");
+        // 只用「下一个皮肤」：Ctrl+Shift+E（上一个）从来没有被单独验证过，
+        // 实测 7K → 4K 需要反向时就会原地不动。宁可在环上多走几步，也不要走方向不对的那一半。
+        int steps = (targetIndex - currentIndex + total) % total;
+        AppLog.Info($"切皮肤：{current} → {target}（下一个 × {steps}，共 {total} 个）");
+        Notice?.Invoke($"切皮肤 {current} → {target}（下一个 × {steps}）");
 
         for (int index = 0; index < steps; index += 1)
         {
             if (!canSendNow())
             {
-                AppLog.Info("切皮肤中断：前台变了");
+                AppLog.Info($"切皮肤中断：前台变了（已发 {index}/{steps}）");
                 return false;
             }
-            if (useForward)
-                KeySender.TapNextSkin();
-            else
-                KeySender.TapPreviousSkin();
+            KeySender.TapNextSkin();
             Thread.Sleep(120);
         }
 
-        Notice?.Invoke($"已切皮肤 {current} → {target}（{steps} 次）");
         return true;
     }
 
@@ -239,7 +262,10 @@ public sealed class Engine : IDisposable
         double target = action.Value;
         double current = state.ScrollSpeed ?? 0;
         if (current <= 0)
+        {
+            AppLog.Info("调流速跳过：读不到当前流速");
             return false;
+        }
 
         int delta = (int)Math.Round(target - current);
         if (delta == 0)
@@ -249,11 +275,12 @@ public sealed class Engine : IDisposable
 
         byte key = delta > 0 ? KeySender.F4 : KeySender.F3;
         int count = Math.Abs(delta);
-        AppLog.Info($"调流速：{current:0.0} → {target:0.0}（发 {count} 次 {(delta > 0 ? "F4" : "F3")}）");
+        AppLog.Info($"调流速：{current:0.0} → {target:0.0}（发 {count} 次 {(delta > 0 ? "F4" : "F3")}，前台可发={canSendNow()}）");
         int sent = KeySender.Burst(key, count, canSendNow);
 
         Thread.Sleep(180);
         double after = tosu.ReadAsync().GetAwaiter().GetResult().ScrollSpeed ?? current;
+        AppLog.Info($"调流速：发了 {sent}/{count}，读回 {after:0.0}");
         if (sent == count && Math.Abs(after - target) >= 0.5)
         {
             int fix = (int)Math.Round(target - after);
@@ -263,6 +290,7 @@ public sealed class Engine : IDisposable
                 KeySender.Burst(fix > 0 ? KeySender.F4 : KeySender.F3, Math.Abs(fix), canSendNow);
                 Thread.Sleep(180);
                 after = tosu.ReadAsync().GetAwaiter().GetResult().ScrollSpeed ?? after;
+                AppLog.Info($"调流速：补发后 {after:0.0}");
             }
         }
 

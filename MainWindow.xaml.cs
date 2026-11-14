@@ -71,19 +71,12 @@ public partial class MainWindow : Window
         engine.Notice += message => Dispatcher.BeginInvoke(() => DetailText.Text = message);
         engine.GamePresenceChanged += running => Dispatcher.BeginInvoke(() =>
         {
-            // 只在「游戏从无到有」的那一刻藏起来；corn 自己启动时游戏已经在跑，就保持可见
-            // —— 否则用户刚打开就没了窗口，看起来像闪退。截图模式也不藏。
-            if (running)
-            {
-                if (firstPresenceSeen && IsVisible && environmentSnapshotPath() is null)
-                {
-                    Hide();
-                    AppLog.Info("游戏已启动，窗口收进托盘（双击托盘图标可以再打开）");
-                }
+            // 调试阶段先**不隐藏**窗口：先确认「切皮肤 / 调流速」都对，再开自动收起。
+            if (running && !firstPresenceSeen)
+                AppLog.Info("检测到 osu! 在运行（调试阶段不隐藏窗口）");
+            firstPresenceSeen = running;
 
-                firstPresenceSeen = true;
-            }
-            else if (!IsVisible)
+            if (!running && !IsVisible)
             {
                 Show();
                 Activate();
@@ -294,6 +287,9 @@ public partial class MainWindow : Window
     }
 
     private static string describe(string? text) => string.IsNullOrWhiteSpace(text) ? "不动" : text;
+
+    /// <summary>调试图：不管预设，排队一次「流速 +1」，用来确认合成按键真的能到游戏。</summary>
+    private void NudgeButton_Click(object sender, RoutedEventArgs e) => engine?.RequestSpeedNudge(1);
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 

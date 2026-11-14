@@ -185,6 +185,9 @@
             <DockPanel>
                 <TextBlock Text="日志" FontSize="10.5" Foreground="{StaticResource MutedTextBrush}"
                            VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Button x:Name="NudgeButton" Content="测 +1" DockPanel.Dock="Right" FontSize="10"
+                        Padding="7,2" Margin="6,0,0,0" VerticalAlignment="Center"
+                        Click="NudgeButton_Click" ToolTip="调试图：排队一次「流速 +1」，等游戏回到前台再发" />
                 <TextBlock x:Name="LogText" Text="就绪" FontSize="10.5" TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center" />
             </DockPanel>
