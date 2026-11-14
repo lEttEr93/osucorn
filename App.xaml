@@ -1,6 +1,7 @@
 <Application x:Class="OsuCorn.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:svc="clr-namespace:OsuCorn.Services"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <!-- 与 osu! Roam 同一套配色，两个工具摆在一起才像一家人。 -->
@@ -17,6 +18,8 @@
 
         <!-- 字体在 App.OnStartup 里由 Typography.Apply() 塞进来（内置 Outfit + 系统中文回退）。 -->
         <FontFamily x:Key="UiFont">Microsoft YaHei UI</FontFamily>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <svc:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
 
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
@@ -103,6 +106,97 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="CaretBrush" Value="{StaticResource TextBrush}" />
+        </Style>
+
+        <!-- 下拉框：和 Roam 同一套深色模板（默认 WPF 主题在这里是白底，很扎眼）。 -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="Background" Value="#181B1E" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid SnapsToDevicePixels="True">
+                            <ToggleButton x:Name="DropDownToggle" Focusable="False" ClickMode="Press"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="ToggleBorder" Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="20" />
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0" Margin="7,3" VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                                                <Path Grid.Column="1" Width="8" Height="5" Stretch="Fill"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      Fill="{StaticResource MutedTextBrush}" Data="M 0 0 L 8 0 L 4 5 Z" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ToggleBorder" Property="Background" Value="#24282C" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False" PopupAnimation="Fade">
+                                <Border Margin="0,2,0,0" Background="#181B1E"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="280" CornerRadius="3">
+                                    <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="Background" Value="#181B1E" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#30353A" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#3A2931" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="CheckBox">

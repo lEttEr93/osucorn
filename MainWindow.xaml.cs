@@ -210,6 +210,17 @@ public partial class MainWindow : Window
         PresetChips.ItemsSource = presets;
     }
 
+    /// <summary>mania 行的键数下拉框改完：落盘并把标签刷一下。</summary>
+    private void ProfileKeys_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || sender is not FrameworkElement { Tag: Profile profile })
+            return;
+
+        store.Save(file);
+        AppLog.Info($"{profile.Label}：皮肤={describe(profile.Skin)}，流速={profile.ScrollSpeedText}");
+        LogText.Text = $"{profile.Label} 已保存";
+    }
+
     /// <summary>编辑单元格（皮肤 / 流速）后落盘。</summary>
     private void ProfileField_LostFocus(object sender, RoutedEventArgs e)
     {

@@ -39,18 +39,35 @@
             </Setter>
         </Style>
 
-        <!-- 表格的一行：模式标签 + 皮肤 + 流速 -->
+        <!-- 表格的一行：mania 给键数下拉框，其它模式显示固定标签 -->
         <DataTemplate x:Key="ProfileRowTemplate">
             <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="1" CornerRadius="6" Padding="9,7" Margin="0,0,0,5">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="74" />
+                        <ColumnDefinition Width="96" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="64" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Label}" FontSize="11.5" VerticalAlignment="Center"
-                               Foreground="{StaticResource SecondaryBrush}" />
+
+                    <!-- mania：自己挑键数（含「其它键数」兜底） -->
+                    <ComboBox Grid.Column="0" ItemsSource="{Binding KeyOptions}" 
+                              SelectedValuePath="Keys" SelectedValue="{Binding KeysForCombo, Mode=TwoWay}"
+                              FontSize="11.5" Padding="6,2" Tag="{Binding}"
+                              SelectionChanged="ProfileKeys_SelectionChanged"
+                              Visibility="{Binding IsMania, Converter={StaticResource BoolToVis}}"
+                              ToolTip="这个键数用这套皮肤 / 流速">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" FontSize="11.5" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <!-- 其它模式：固定标签 -->
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="11.5" VerticalAlignment="Center"
+                               Foreground="{StaticResource SecondaryBrush}"
+                               Visibility="{Binding IsMania, Converter={StaticResource InverseBoolToVis}}" />
+
                     <TextBox Grid.Column="1" Text="{Binding Skin, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              FontSize="11" Padding="6,3" Tag="{Binding}"
                              LostFocus="ProfileField_LostFocus"
@@ -142,7 +159,7 @@
             <!-- 列头：告诉用户右边两格分别是皮肤名和流速 -->
             <Grid DockPanel.Dock="Top" Margin="9,0,9,4">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="74" />
+                    <ColumnDefinition Width="96" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="64" />
                 </Grid.ColumnDefinitions>
