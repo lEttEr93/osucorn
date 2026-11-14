@@ -115,7 +115,8 @@ public sealed class Engine : IDisposable
 
         // 皮肤：选歌界面 + 目标非空 + 名字还没对上
         if (inSelect && !string.IsNullOrWhiteSpace(row.Skin) &&
-            !string.Equals(state.SkinName, row.Skin, StringComparison.Ordinal))
+            !string.Equals(state.SkinName, row.Skin, StringComparison.Ordinal) &&
+            !blockedSkins.Contains(row.Skin))
         {
             string key = $"{row.Skin}|{state.SkinName}";
             if (key != lastSkinKey && !hasPending(ActionKind.Skin))
@@ -231,14 +232,21 @@ public sealed class Engine : IDisposable
         {
             Notice?.Invoke($"没有这个皮肤：{target}");
             AppLog.Info($"切皮肤失败：列表里没有「{target}」（已知 {skinOrder.Count} 个）");
+            blockSkin(target, "不在皮肤列表里");
             return true; // 这条放弃，别卡住队列
         }
 
         if (!skinOrder.TryGetValue(current, out int currentIndex))
-            currentIndex = 0;
+        {
+            // 当前皮肤不在表里（玩家自己换了皮肤 / 表过期），重新扫一次再决定。
+            AppLog.Info($"当前皮肤「{current}」不在列表里，重扫皮肤表");
+            skinOrder.Clear();
+            Notice?.Invoke("皮肤表和当前皮肤对不上，下轮重扫");
+            return false;
+        }
 
         int total = skinOrder.Count;
-        // 两个方向都可用（Ctrl+Shift+T 下一个 / Ctrl+Shift+E 上一个），走环上更近的那一半。
+        // 两个方向都可用（Ctrl+Shift+T 下一个 / Ctrl+Shift+E 上一个），走环上更近的一半。
         int forward = (targetIndex - currentIndex + total) % total;
         int backward = (currentIndex - targetIndex + total) % total;
         bool useForward = forward <= backward;
@@ -257,7 +265,61 @@ public sealed class Engine : IDisposable
             Thread.Sleep(120);
         }
 
+        // 读回确认：没到就补一次，再不到就认输并**禁止**再试这个目标 —— 否则会一直切不停。
+        string? landed = waitForSkinName(target, timeoutMs: 600, expectTarget: true);
+        if (landed is null && !string.Equals(landed, target, StringComparison.Ordinal))
+        {
+            AppLog.Info($"切皮肤没到目标，补一次（当前 {landed ?? "未知"}）");
+            if (landed is not null && skinOrder.TryGetValue(landed, out int landedIndex))
+            {
+                int fixForward = (targetIndex - landedIndex + total) % total;
+                int fixBackward = (landedIndex - targetIndex + total) % total;
+                bool fixUseForward = fixForward <= fixBackward;
+                int fixSteps = fixUseForward ? fixForward : fixBackward;
+                for (int index = 0; index < fixSteps && canSendNow(); index += 1)
+                {
+                    if (fixUseForward)
+                        KeySender.TapNextSkin();
+                    else
+                        KeySender.TapPreviousSkin();
+                    Thread.Sleep(120);
+                }
+                landed = waitForSkinName(target, timeoutMs: 600, expectTarget: true);
+            }
+        }
+
+        if (string.Equals(landed, target, StringComparison.Ordinal))
+        {
+            AppLog.Info($"切皮肤完成：{current} → {landed}");
+            Notice?.Invoke($"已切到 {target}");
+            return true;
+        }
+
+        blockSkin(target, $"落了 {landed ?? "未知"} 而不是目标");
         return true;
+    }
+
+    /// <summary>轮询读皮肤名，直到它变成目标（或超时）；返回最后一次读到的名字。</summary>
+    private string? waitForSkinName(string target, int timeoutMs, bool expectTarget)
+    {
+        DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            last = tosu.ReadAsync().GetAwaiter().GetResult().SkinName;
+            if (string.Equals(last, target, StringComparison.Ordinal))
+                return last;
+            Thread.Sleep(120);
+        }
+        return last;
+    }
+
+    /// <summary>这个皮肤目标就到此为止：记下来，别再来回切。</summary>
+    private void blockSkin(string target, string reason)
+    {
+        if (blockedSkins.Add(target))
+            AppLog.Info($"放弃切到「{target}」：{reason}（本次运行不再尝试）");
+        Notice?.Invoke($"切皮肤放弃：{target}（{reason}）");
     }
 
     /// <summary>调流速：算出差值，一次性发完，读回校验，差一格再补一把。</summary>
@@ -307,11 +369,14 @@ public sealed class Engine : IDisposable
     // ---- 皮肤环形列表 ----
 
     private readonly Dictionary<string, int> skinOrder = new(StringComparer.Ordinal);
+    private readonly HashSet<string> blockedSkins = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// 启动时扫一圈皮肤：连按「下一个皮肤」直到回到起点，把途中的名字按顺序记下来，
-    /// 结束时正好停在起始皮肤上（不改变玩家当前皮肤）。
-    /// 需要游戏在前台，所以由 <see cref="ScanSkinsIfNeeded"/> 在合适的时机调用。
+    /// 扫一圈皮肤建立环形列表。
+    ///
+    /// 关键：皮肤切换是**异步加载**，按下到 tosu 里名字变化有延迟（大皮肤更久）。
+    /// 所以每按一次都要**轮询等名字真的变了**再记录；等不到就补按，补几次还不变就放弃本次扫描。
+    /// 宁可没有列表，也不要用一张错的表去算步数 —— 那正是「皮肤停不下来」的原因。
     /// </summary>
     public bool skinsScanned => skinOrder.Count > 0;
 
@@ -325,26 +390,70 @@ public sealed class Engine : IDisposable
             return false;
 
         AppLog.Info($"扫皮肤：从「{start}」开始");
-        skinOrder[start] = 0;
-        int index = 1;
-        for (int guard = 0; guard < 60; guard += 1)
+        Dictionary<string, int> found = new(StringComparer.Ordinal) { [start] = 0 };
+        string current = start;
+
+        for (int index = 1; index <= 60; index += 1)
         {
-            if (!canSendNow())
+            string? next = null;
+            for (int attempt = 0; attempt < 3 && next is null; attempt += 1)
+            {
+                if (!canSendNow())
+                {
+                    AppLog.Info("扫皮肤中断：前台变了");
+                    return false;
+                }
+
+                KeySender.TapNextSkin();
+                next = await waitForSkinChangeAsync(current, timeoutMs: 1000);
+            }
+
+            if (next is null)
+            {
+                AppLog.Info($"扫皮肤放弃：在「{current}」上连按 3 次名字都没变");
                 return false;
-            KeySender.TapNextSkin();
-            await Task.Delay(150);
-            TosuState read = await tosu.ReadAsync();
-            string name = read.SkinName;
-            if (name.Length == 0 || string.Equals(name, start, StringComparison.Ordinal))
+            }
+
+            if (string.Equals(next, start, StringComparison.Ordinal))
+                break; // 转完一圈，正好回到起点
+
+            if (found.ContainsKey(next))
+            {
+                AppLog.Info($"扫皮肤：又见到「{next}」（可能有同名皮肤），按这一圈算");
                 break;
-            if (skinOrder.ContainsKey(name))
-                break; // 重名或提前闭环，停手
-            skinOrder[name] = index++;
+            }
+
+            found[next] = index;
+            current = next;
         }
+
+        if (found.Count < 2)
+        {
+            AppLog.Info($"扫皮肤失败：只认到 {found.Count} 个，不采信");
+            return false;
+        }
+
+        skinOrder.Clear();
+        foreach (KeyValuePair<string, int> pair in found)
+            skinOrder[pair.Key] = pair.Value;
 
         AppLog.Info($"扫皮肤完成：{skinOrder.Count} 个 —— {string.Join(" / ", skinOrder.Keys.Take(8))}");
         Notice?.Invoke($"已建立皮肤列表（{skinOrder.Count} 个）");
         return true;
+    }
+
+    /// <summary>按一次之后，轮询等 tosu 里的皮肤名变化；超时返回 null。</summary>
+    private async Task<string?> waitForSkinChangeAsync(string current, int timeoutMs)
+    {
+        DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(120);
+            TosuState read = await tosu.ReadAsync();
+            if (read.SkinName.Length > 0 && !string.Equals(read.SkinName, current, StringComparison.Ordinal))
+                return read.SkinName;
+        }
+        return null;
     }
 
     private readonly record struct PendingAction(ActionKind Kind, string Text, double Value);
