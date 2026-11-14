@@ -125,9 +125,14 @@ public sealed class TosuClient
         if (!string.Equals(mode, "mania", StringComparison.OrdinalIgnoreCase))
             return (null, string.Empty);
 
+        // 注意：tosu 的 stats.cs 是个对象 { original, converted }，不是数字。
+        // std 谱面在 mania 模式下会被转换，**converted 才是实际键数**；原生 mania 谱两者相同。
         foreach ((string[] path, string name) in new (string[], string)[]
                  {
-                     (["beatmap", "stats", "cs"], "beatmap.stats.cs"),
+                     (["beatmap", "stats", "cs", "converted"], "stats.cs.converted"),
+                     (["beatmap", "stats", "cs", "original"], "stats.cs.original"),
+                     (["beatmap", "stats", "cs"], "stats.cs"),
+                     (["beatmap", "cs", "converted"], "beatmap.cs.converted"),
                      (["beatmap", "cs"], "beatmap.cs"),
                      (["beatmap", "stats", "keys"], "beatmap.stats.keys"),
                      (["beatmap", "keys"], "beatmap.keys")
