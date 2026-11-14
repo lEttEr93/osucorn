@@ -23,6 +23,9 @@ public sealed class Engine : IDisposable
     private bool polling;
     private bool gameRunning;
     private string lastStateFingerprint = string.Empty;
+    private double lastLiveTime;
+    private bool liveClockRunning;
+    private bool wasPlaying;
     private string lastSpeedKey = string.Empty;
     private string lastSkinKey = string.Empty;
     private TosuState state = TosuState.Disconnected;
@@ -68,6 +71,30 @@ public sealed class Engine : IDisposable
             state = await tosu.ReadAsync();
             StateUpdated?.Invoke(state);
 
+            // tosu 的 beatmap.time.live 在选歌界面是**试听进度**（可能是 27 秒），加载阶段还停在上一次的值。
+            // 所以「进游戏了」不能只看 state==play，要看 live 有没有真的在往前走：
+            //   · 刚进 play 的那一拍只记基准（加载时 live 冻住不动，差值会是 0）
+            //   · 下一拍 live 至少前进 100ms，才认为时钟真的在走
+            if (state.StateName == "play")
+            {
+                if (!wasPlaying)
+                {
+                    lastLiveTime = state.LiveTime;
+                    wasPlaying = true;
+                    liveClockRunning = false; // 这一拍不加判断，等下一拍对比
+                }
+                else
+                {
+                    liveClockRunning = state.LiveTime - lastLiveTime >= 100;
+                    lastLiveTime = state.LiveTime;
+                }
+            }
+            else
+            {
+                wasPlaying = false;
+                liveClockRunning = false;
+            }
+
             bool running = state.Connected && state.Client == "lazer";
             if (running != gameRunning)
             {
@@ -81,7 +108,10 @@ public sealed class Engine : IDisposable
             if (state.Fingerprint != lastStateFingerprint)
             {
                 lastStateFingerprint = state.Fingerprint;
-                AppLog.Info($"状态：{state.Summary}" + (state.KeyCount is { } keys ? $"｜键数 {keys}" : string.Empty));
+                Profile? row = activePreset()?.Match(state.ModeName, state.KeyCount ?? 0);
+                AppLog.Info($"状态：{state.Summary}" + (state.KeyCount is { } keys ? $"｜键数 {keys}" : string.Empty)
+                            + $"｜live={state.LiveTime:0} 时钟在走={liveClockRunning}"
+                            + (row is null ? "｜没有对应行" : $"｜该行皮肤={row.Skin ?? "空"} 流速={row.ScrollSpeedText switch { "" => "空", var text => text }}"));
             }
         }
         catch (Exception exception)
@@ -109,9 +139,8 @@ public sealed class Engine : IDisposable
         }
 
         bool inSelect = state.StateName is "selectPlay" or "menu";
-        // 流速要等「加载结束、真正进游戏」之后再调：tosu 的 beatmap.time.live 在加载阶段是 0，
-        // 开局后才开始走。留 150ms 余量，免得砸在读条/开场动画上。
-        bool inPlay = state.StateName == "play" && !state.Paused && state.LiveTime > 150;
+        // 流速要等「加载结束、真正进游戏」之后再调：判据是 live 时钟在往前走（见 tickAsync）。
+        bool inPlay = state.StateName == "play" && !state.Paused && liveClockRunning;
 
         // 皮肤：选歌界面 + 目标非空 + 名字还没对上
         if (inSelect && !string.IsNullOrWhiteSpace(row.Skin) &&
@@ -171,7 +200,7 @@ public sealed class Engine : IDisposable
             {
                 ActionKind.Skin when state.StateName is "selectPlay" or "menu" => applySkin(action),
                 ActionKind.Speed when state.StateName == "play" && !state.Paused &&
-                                   state.LiveTime > 150 && state.ScrollSpeed is not null => applySpeed(action),
+                                   liveClockRunning && state.ScrollSpeed is not null => applySpeed(action),
                 _ => false
             };
 
