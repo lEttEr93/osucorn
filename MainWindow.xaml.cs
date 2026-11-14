@@ -22,10 +22,14 @@ namespace OsuCorn;
 public partial class MainWindow : Window
 {
     private readonly PresetStore store = new();
+    private readonly TosuClient tosu = new();
     private readonly ObservableCollection<Preset> presets = [];
     private readonly ObservableCollection<Profile> rows = [];
     private PresetFile file = new();
     private bool loading; // 初始化 / 切换预设期间不要触发保存
+    private System.Windows.Threading.DispatcherTimer? pollTimer;
+    private bool polling;
+    private string lastLoggedState = string.Empty;
 
     public MainWindow()
     {
@@ -44,15 +48,71 @@ public partial class MainWindow : Window
 
         selectActivePreset(file.ActivePreset);
 
+        // 只读轮询：每 500ms 读一次 tosu，把状态画到卡片上。这一版**不发送任何按键**。
+        Loaded += (_, _) => startPolling();
+
         // 开发用：--snapshot=<png> 渲染一张就走。
         if (environmentSnapshotPath() is { } path)
         {
             Loaded += async (_, _) =>
             {
-                await Task.Delay(300);
+                await Task.Delay(700);
                 capture(path);
                 Close();
             };
+        }
+    }
+
+    private void startPolling()
+    {
+        pollTimer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        pollTimer.Tick += async (_, _) => await pollAsync();
+        pollTimer.Start();
+        _ = pollAsync();
+    }
+
+    /// <summary>读一次 tosu 并刷新状态卡；只在状态真的变了时才写日志。</summary>
+    private async Task pollAsync()
+    {
+        if (polling)
+            return;
+        polling = true;
+        try
+        {
+            TosuState state = await tosu.ReadAsync();
+            applyState(state);
+        }
+        finally
+        {
+            polling = false;
+        }
+    }
+
+    private void applyState(TosuState state)
+    {
+        ConnectionText.Text = state.Connected ? "tosu 已连接" : "tosu 未连接";
+        StateText.Text = state.Summary;
+
+        Profile? active = activePreset?.Match(state.ModeName.Length == 0 ? "?" : state.ModeName, state.KeyCount ?? 0);
+        if (state.Connected)
+        {
+            string row = active is null ? "这套预设里没有对应模式的行" : $"{active.Label}：皮肤 {describe(active.Skin)}，流速 {describe(active.ScrollSpeedText)}";
+            DetailText.Text = $"会自动套用 → {row}｜前台：{(GameWindow.IsOsuForeground() ? "osu!" : GameWindow.ForegroundTitle())}";
+        }
+        else
+        {
+            DetailText.Text = $"等待 {tosu.Endpoint}（tosu 没起来时这里会一直是未连接）";
+        }
+
+        if (state.Fingerprint != lastLoggedState)
+        {
+            lastLoggedState = state.Fingerprint;
+            AppLog.Info($"tosu 状态：{state.Summary}"
+                        + (state.KeyCount is { } keys ? $"｜键数 {keys}（来源 {state.KeyCountSource}）" : "｜键数未知"));
         }
     }
 
