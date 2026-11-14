@@ -47,7 +47,8 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="96" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="64" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="58" />
                     </Grid.ColumnDefinitions>
 
                     <!-- mania：自己挑键数（含「其它键数」兜底） -->
@@ -72,8 +73,11 @@
                              FontSize="11" Padding="6,3" Tag="{Binding}"
                              LostFocus="ProfileField_LostFocus"
                              ToolTip="皮肤名，必须和 osu! 里显示的一致；留空 = 这行不动皮肤" />
-                    <TextBox Grid.Column="2" Text="{Binding ScrollSpeedText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             FontSize="11" Padding="6,3" Margin="6,0,0,0" Tag="{Binding}"
+                    <Button Grid.Column="2" Content="取当前" FontSize="10.5" Padding="7,3" Margin="6,0"
+                            VerticalAlignment="Center" Tag="{Binding}" Click="UseCurrentButton_Click"
+                            ToolTip="把这一行填成 osu! 现在的皮肤 / 流速（皮肤名太长时用它）" />
+                    <TextBox Grid.Column="3" Text="{Binding ScrollSpeedText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             FontSize="11" Padding="6,3" Tag="{Binding}"
                              LostFocus="ProfileField_LostFocus"
                              IsEnabled="{Binding SupportsScrollSpeed}"
                              ToolTip="mania 流速 1–40，整数档；留空 = 这行不动流速" />
@@ -156,17 +160,18 @@
                 <TextBlock x:Name="ProfilesHeader" Text="配置（自动匹配当前模式，不用手动选）"
                            FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" />
             </DockPanel>
-            <!-- 列头：告诉用户右边两格分别是皮肤名和流速 -->
+            <!-- 列头：告诉用户右边几格分别是皮肤名、取当前、流速 -->
             <Grid DockPanel.Dock="Top" Margin="9,0,9,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="96" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="56" />
+                    <ColumnDefinition Width="58" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="模式" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
                 <TextBlock Grid.Column="1" Text="皮肤（留空 = 不动）" FontSize="10"
                            Foreground="{StaticResource MutedTextBrush}" />
-                <TextBlock Grid.Column="2" Text="流速" FontSize="10" Margin="6,0,0,0"
+                <TextBlock Grid.Column="3" Text="流速" FontSize="10" Margin="6,0,0,0"
                            Foreground="{StaticResource MutedTextBrush}" />
             </Grid>
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

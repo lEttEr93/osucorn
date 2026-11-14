@@ -68,9 +68,10 @@ public partial class MainWindow : Window
         engine.GamePresenceChanged += running => Dispatcher.BeginInvoke(() =>
         {
             // 游戏一出现就把配置窗藏到托盘；游戏退出再回来。
+            // 截图模式（--snapshot）不藏，否则拍到的是一张空图。
             if (running)
             {
-                if (IsVisible)
+                if (IsVisible && environmentSnapshotPath() is null)
                     Hide();
             }
             else if (!IsVisible)
@@ -217,6 +218,59 @@ public partial class MainWindow : Window
         store.Save(file);
         AppLog.Info($"{profile.Label}：皮肤={describe(profile.Skin)}，流速={profile.ScrollSpeedText}");
         LogText.Text = $"{profile.Label} 已保存";
+    }
+
+    /// <summary>「取当前」：把这一行填成 osu! 现在的皮肤 / 流速（皮肤名通常很长，手打不现实）。</summary>
+    private void UseCurrentButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: Profile profile })
+            return;
+
+        TosuState state = engine?.State ?? TosuState.Disconnected;
+        if (!state.Connected)
+        {
+            LogText.Text = "tosu 未连接，取不到当前值";
+            return;
+        }
+
+        List<string> filled = [];
+        if (state.SkinName.Length > 0)
+        {
+            profile.Skin = state.SkinName;
+            filled.Add($"皮肤 {state.SkinName}");
+        }
+
+        if (profile.SupportsScrollSpeed && state.ScrollSpeed is > 0 and { } speed)
+        {
+            profile.ScrollSpeed = speed;
+            filled.Add($"流速 {speed:0.#}");
+        }
+
+        store.Save(file);
+        refreshRows();
+        AppLog.Info($"{profile.Label} 取当前：{string.Join("，", filled)}");
+        LogText.Text = filled.Count == 0
+            ? "当前没有可取的皮肤 / 流速"
+            : $"{profile.Label} 已填：{string.Join("，", filled)}";
+    }
+
+    /// <summary>重建配置表（Profile 没有 INotifyPropertyChanged，改完值要靠重建立即显示）。</summary>
+    private void refreshRows()
+    {
+        loading = true;
+        try
+        {
+            Preset? preset = activePreset;
+            rows.Clear();
+            if (preset is null)
+                return;
+            foreach (Profile profile in preset.Profiles)
+                rows.Add(profile);
+        }
+        finally
+        {
+            loading = false;
+        }
     }
 
     /// <summary>编辑单元格（皮肤 / 流速）后落盘。</summary>
