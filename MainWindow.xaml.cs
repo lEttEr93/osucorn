@@ -115,6 +115,7 @@ public partial class MainWindow : Window
         {
             DetailText.Text = $"等待 {tosu.Endpoint}（tosu 没起来时这里会一直是未连接）";
         }
+        updateSkinTableText();
     }
 
     /// <summary>当前启用中的预设。</summary>
@@ -290,6 +291,24 @@ public partial class MainWindow : Window
 
     /// <summary>调试图：不管预设，排队一次「流速 +1」，用来确认合成按键真的能到游戏。</summary>
     private void NudgeButton_Click(object sender, RoutedEventArgs e) => engine?.RequestSpeedNudge(1);
+
+    /// <summary>底栏显示皮肤表建到第几步了。</summary>
+    private void updateSkinTableText()
+    {
+        int count = engine?.SkinCount ?? 0;
+        SkinTableText.Text = count == 0 ? "皮肤表：未建立" : $"皮肤表：{count} 个";
+        if (count > 0)
+            SkinTableText.ToolTip = engine!.SkinListText;
+    }
+
+    /// <summary>清掉皮肤表重扫（玩家自己换过皮肤、或切不到位时用）。</summary>
+    private void RescanButton_Click(object sender, RoutedEventArgs e)
+    {
+        engine?.ResetSkins();
+        updateSkinTableText();
+        LogText.Text = "皮肤表已清空，下一轮重扫（需要游戏在前台）";
+        _ = scanSkinsWhenReadyAsync();
+    }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 

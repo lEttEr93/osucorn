@@ -196,6 +196,12 @@
         <DockPanel Grid.Row="5" Margin="0,8,0,0">
             <TextBlock x:Name="VersionText" DockPanel.Dock="Right" HorizontalAlignment="Right" FontSize="10.5"
                        Foreground="{StaticResource MutedTextBrush}" />
+            <Button x:Name="RescanButton" Content="重扫皮肤" DockPanel.Dock="Right" FontSize="10"
+                    Padding="7,2" Margin="6,0,8,0" VerticalAlignment="Center"
+                    Click="RescanButton_Click" ToolTip="清掉皮肤表重新扫一圈（你自己换过皮肤、或切不到位时用）" />
+            <TextBlock x:Name="SkinTableText" DockPanel.Dock="Right" HorizontalAlignment="Right" FontSize="10.5"
+                       Margin="0,0,6,0" VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedTextBrush}" Text="皮肤表：未建立" />
             <TextBlock Text="只通过 osu! 自己的快捷键操作，不改任何配置文件" FontSize="10.5"
                        Foreground="{StaticResource MutedTextBrush}" />
         </DockPanel>

@@ -366,6 +366,23 @@ public sealed class Engine : IDisposable
         return true;
     }
 
+    /// <summary>皮肤表里认到几个（0 = 还没建立）。</summary>
+    public int SkinCount => skinOrder.Count;
+
+    /// <summary>皮肤表的内容，排查用。</summary>
+    public string SkinListText => skinOrder.Count == 0
+        ? "未建立"
+        : string.Join(" / ", skinOrder.OrderBy(pair => pair.Value).Select(pair => pair.Key));
+
+    /// <summary>清掉皮肤表并解除放弃名单，强制重扫。</summary>
+    public void ResetSkins()
+    {
+        skinOrder.Clear();
+        blockedSkins.Clear();
+        AppLog.Info("皮肤表已清空，准备重扫");
+        Notice?.Invoke("皮肤表已清空，下一轮重扫");
+    }
+
     // ---- 皮肤环形列表 ----
 
     private readonly Dictionary<string, int> skinOrder = new(StringComparer.Ordinal);
